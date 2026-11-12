@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic AI Demo</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+  h1 { font-size: 1.5rem; }
+  .mode { background: #eef4ff; border: 1px solid #bcd3ff; padding: .6rem .8rem; border-radius: 8px; font-size: .9rem; }
+  textarea { width: 100%; min-height: 64px; padding: .6rem; font-size: 1rem; }
+  button { padding: .6rem 1.2rem; font-size: 1rem; cursor: pointer; margin-top: .5rem; }
+  .example { display: inline-block; margin: .2rem .2rem 0 0; padding: .3rem .6rem; border: 1px solid #ccc; border-radius: 20px; background: #fff; cursor: pointer; font-size: .85rem; }
+  .step { border: 1px solid #ddd; border-radius: 8px; padding: .7rem .9rem; margin: .6rem 0; }
+  .step .tool { font-size: .8rem; color: #555; }
+  .flag { background: #fff3cd; border: 1px solid #e6c200; padding: .6rem .8rem; border-radius: 8px; }
+  .answer { background: #eef7ee; border: 1px solid #9ccc9c; padding: .8rem; border-radius: 8px; white-space: pre-wrap; }
+  pre { white-space: pre-wrap; word-break: break-word; background: #f6f6f6; padding: .5rem; border-radius: 6px; font-size: .85rem; }
+  .status-ok { color: #1a7f37; } .status-failed { color: #b3261e; } .status-no_results { color: #8a6d00; }
+</style>
+</head>
+<body>
+<h1>Agentic AI Demo</h1>
+<p class="mode"><strong>Local demo mode:</strong> deterministic planner, no LLM key required. Tools are local only — calculator, local document search, and a local knowledge-base search (not a live web search). Every step is shown in the trace.</p>
+<label for="goal"><strong>Your goal</strong></label><br>
+<textarea id="goal" placeholder="e.g. What is RAG and how does it work?"></textarea><br>
+<button id="run">Run agent</button>
+<p id="examples"></p>
+<div id="out"></div>
+<script>
+const goalEl = document.getElementById('goal');
+const out = document.getElementById('out');
+async function loadExamples() {
+  const r = await fetch('/examples'); const d = await r.json();
+  document.getElementById('examples').innerHTML = d.examples.map(e =>
+    `<button class="example">${e.replace(/</g,'&lt;')}</button>`).join('');
+  document.querySelectorAll('.example').forEach(b => b.onclick = () => { goalEl.value = b.textContent; });
+}
+loadExamples();
+document.getElementById('run').onclick = async () => {
+  const goal = goalEl.value.trim();
+  if (!goal) { out.innerHTML = '<p>Please enter a goal.</p>'; return; }
+  out.innerHTML = '<p>Running…</p>';
+  const r = await fetch('/run', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({goal}) });
+  const d = await r.json();
+  let html = `<p><strong>Status:</strong> ${d.status} &nbsp;|&nbsp; <strong>Mode:</strong> ${d.mode}</p>`;
+  if (d.guardrail && d.guardrail.flagged) {
+    html += `<div class="flag"><strong>⚠️ Guardrail flagged this input.</strong><br>${d.guardrail.reason}</div>`;
+  }
+  html += '<h2>Plan &amp; trace</h2>';
+  (d.trace || []).forEach(t => {
+    html += `<div class="step"><strong>Step ${t.step}: ${t.title}</strong> <span class="tool">(${t.tool} — <span class="status-${t.status}">${t.status}</span>)</span><pre>input: ${JSON.stringify(t.input)}\noutput: ${JSON.stringify(t.output, null, 2)}</pre></div>`;
+  });
+  html += `<h2>Final answer</h2><div class="answer">${(d.final_answer || '').replace(/</g,'&lt;')}</div>`;
+  out.innerHTML = html;
+};
+</script>
+</body>
+</html>
